@@ -3,6 +3,8 @@
 .Rdata
 .httr-oauth
 .DS_Store
+.code-workspace
+.Rproj
 workflow/data
 pipeline
 *.html
@@ -12,3 +14,4 @@ app/data
 data/hms
 analysis
 hpc
+
