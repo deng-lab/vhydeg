@@ -3,8 +3,8 @@
 .Rdata
 .httr-oauth
 .DS_Store
-.code-workspace
-.Rproj
+*.code-workspace
+*.Rproj
 workflow/data
 pipeline
 *.html
