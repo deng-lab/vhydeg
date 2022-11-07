@@ -9,7 +9,7 @@ format:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
 ```
 
 ```{r}
@@ -299,3 +299,15 @@ df_hyd %>%
 # save plot
 ggsave(here(wd, "fig01_lq_canthyd_noise_anno_pfama.png"), width = 6, height = 5)
 ```
+
+
+##### Extract non-noise hits
+  
+  ```{r}
+  # save non-noise hits to file
+  df_hyd %>% 
+    filter(notnoise == 1) %>%
+    # sort by dbid
+    arrange(dbid) %>%
+    write_tsv(here(wd, "lq_canthyd_nonnoise_hits.tsv"))
+  ```
