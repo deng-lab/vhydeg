@@ -52,12 +52,18 @@ library(data.table)
 library(tidytree)
 library(ape)
 library(ggtree)
+library(ggtreeExtra)
+library(ggnewscale)
 
 dir_prj <- normalizePath("..")
 wd <- here(dir_prj, "data/fig1_HYDG_tree")
+```
 
+
+```{r}
 # function to read the ".nwk" tree file, plot using ggtree, and save to pdf file
 create_tree <- function(ftree, df_anno_imgvr, df_anno_nr) {
+  
   tree_tbl <- read.tree(ftree) %>%
     as_tibble() %>%
     mutate(UVIG = ifelse(str_detect(label, "^IMGVR"), label, "")) %>%
@@ -73,12 +79,113 @@ create_tree <- function(ftree, df_anno_imgvr, df_anno_nr) {
     left_join(df_anno_nr[, c("protid", "Kingdom", "Phylum", "Class")], by = c("label" = "protid")) %>%
     mutate(eco3 = "Unknown")
 
-  tree <- rbind(tree_IMGVR, tree_nr) %>%
-    as.treedata()
+  # tree <- rbind(tree_IMGVR, tree_nr) %>%
+  #   as.treedata()
+  
+  ## ===================== reduce tree at phylum level =========================
+  
+  # create dataframe with tree data
+  tree_data <- rbind(tree_IMGVR, tree_nr)
 
-  p <- ggtree(tree, layout="equal_angle", color="grey") +
-    geom_tiplab2(aes(label=Kingdom, color = Kingdom), size=0, color="black", offset=0) +
-    geom_tippoint(aes(color=Kingdom), size=0.2, alpha=0.7) 
+  # make labels shorter
+  tree_data$label[grep("^IMGVR", tree_data$label)] <- tree_data$UVIG[grep("^IMGVR", tree_data$label)]
+  
+  # create tree as phylo object (easier to manipulate)
+  tree_phylo <- as.phylo(tree_data)
+  
+  # get all possible subtrees
+  sub <- subtrees(tree_phylo)
+  
+  # extract subtrees which leaves have the same phylum
+  subs_to_collapse_ind <- which(sapply(sub, function(x) {
+    length(unique(tree_data$Phylum[which(tree_data$label %in% x$tip.label)])) == 1
+  }))
+  
+  subs_to_collapse <- sub[subs_to_collapse_ind]
+  
+  tips_to_remove <- sapply(subs_to_collapse, function(x) return(x$tip.label))
+  
+  # remove the previous subtrees from the original tree
+  pruned_phylo <- tree_phylo
+  
+  for (i in seq(1,length(tips_to_remove))) {
+    if (all(tips_to_remove[[i]] %in% pruned_phylo$tip.label)) {
+      pruned_phylo <- ape::drop.tip(pruned_phylo, tips_to_remove[[i]], trim.internal = TRUE)
+      # print(pruned_phylo$Nnode)
+      # print(length(pruned_phylo$tip.label))
+    }
+  }
+  
+  ## ==================== prepare annotation dataset for the plot ========================
+  
+  # prepare dataframe with annotations for the plot
+  new_tips <- pruned_phylo$tip.label
+  pruned_data <- as.data.frame(tree_data[which(tree_data$label %in% new_tips),])
+  rownames(pruned_data) <- pruned_data$label
+  
+  pruned_data$Phylum[which(pruned_data$Phylum=="")] <- NA
+  pruned_data$eco3[which(pruned_data$eco3=="")] <- NA
+  
+  
+  pruned_data <- pruned_data[seq(4,9)]
+  
+  # set colors to always have enough
+  my_colors <- c("#669900","#99CC33", "#ccee66","#006699","#3399cc",
+                 "#990066","#cc3399","#900808", "#E02929",
+                 "#ff6600","#ff9900","#ffcc00", "#FFE788")
+  my_colors <- c(colorRampPalette(my_colors)(length(unique(pruned_data$Phylum))-1),"#787777")
+  my_colors2 <- c("#5f0f40","#9a031e","#fb8b24","#BC5210","#0f4c5c")
+  my_colors2 <- c(colorRampPalette(my_colors2)(length(unique(pruned_data$eco3))-1),"#787777")
+  
+  # my_colors <- rev(c("#fe0000", "#800001", "#fe6a00", "#803400",
+  #                "#ffd800", "#806b00", "#00fe21", "#007f0e",
+  #                "#0094fe", "#00497e", "#0026ff", "#001280", "#b100fe"))
+  
+  ##  ================== plot the tree =========================================
+  
+  p <- ggtree(pruned_phylo, layout = "circular", color="black", size=0.2) 
+
+  p <- p %<+% pruned_data +
+    geom_tippoint(aes(fill=Phylum), size=0.7, alpha=0.7, shape=21, color="transparent",
+                  show.legend = FALSE) +
+    
+    geom_tiplab(color="black", size=1, align=FALSE) +
+    
+    # FOR SOME REASON TIP LABELS GIVE AN ERROR WHEN ALIGN IS SET TO TRUE ?????
+    # geom_tiplab(color="black", size=0.8, align=TRUE,
+    #             linetype = "dotted", linesize = 0.2) +
+  
+    geom_fruit(geom=geom_tile,
+               mapping=aes(fill=Phylum),
+               offset = 0.5,
+               width=0.4) +
+  
+    scale_fill_manual(name="Phylum (inner circle)",
+                      guide=guide_legend(keywidth=0.8, keyheight=0.8, ncol=1),
+                      values=my_colors) +
+  
+    theme(legend.title=element_text(size=9), legend.text=element_text(size=7))
+  
+  p <- p +
+    new_scale_fill() +
+    
+    geom_fruit(geom=geom_tile,
+               mapping=aes(fill=eco3),
+               offset = 0.08,
+               width=0.3) +
+  
+    scale_fill_manual(name="Ecosystem (outer circle)",
+                      guide=guide_legend(keywidth=0.8, keyheight=0.8, ncol=1),
+                      values = my_colors2)
+                      # values = my_colors[c(13,11,9,7,5)])
+  
+  ## =============================================================================
+
+  # p <- ggtree(tree, layout="equal_angle", color="grey") +
+  #   geom_tiplab2(aes(label=Kingdom, color = Kingdom), size=0, color="black", offset=0) +
+  #   geom_tippoint(aes(color=Kingdom), size=0.2, alpha=0.7)
+  
+  
   # output file name is basename of ftree without extension
   ggsave(filename=path_target(paste0(basename(ftree), ".pdf")), plot=p, width = 20, height = 13)
 }
@@ -158,8 +265,9 @@ TODO:
 
 - [ ] Add Phylum name, environment source as a circular heatmap in the outside of the tree.
 
+
 ```{r using alkb.nwk as test}
-# create_tree(here(wd, "top_alkb_tree.nwk"), df_anno_imgvr, df_anno_nr)
+create_tree(here(wd, "top_alkb_tree.nwk"), df_anno_imgvr, df_anno_nr)
 ```
 
 Files were saved to `r path_target()`.
