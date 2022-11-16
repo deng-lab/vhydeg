@@ -51,6 +51,7 @@ library(treedataverse)
 library(data.table)
 library(tidytree)
 library(ape)
+library(treeducken)
 library(ggtree)
 library(ggtreeExtra)
 library(ggnewscale)
@@ -62,6 +63,7 @@ wd <- here(dir_prj, "data/fig1_HYDG_tree")
 
 ```{r}
 # function to read the ".nwk" tree file, plot using ggtree, and save to pdf file
+# This works for the small tree 
 create_tree <- function(ftree, df_anno_imgvr, df_anno_nr) {
   
   tree_tbl <- read.tree(ftree) %>%
@@ -103,16 +105,18 @@ create_tree <- function(ftree, df_anno_imgvr, df_anno_nr) {
   
   subs_to_collapse <- sub[subs_to_collapse_ind]
   
-  tips_to_remove <- sapply(subs_to_collapse, function(x) return(x$tip.label))
+  # sort subs_to collapse in decreasing number of tips order
+  subs_to_collapse <- subs_to_collapse[order(sapply(subs_to_collapse, function(x) {length(x$tip.label)}),
+                                             decreasing = TRUE)]
   
-  # remove the previous subtrees from the original tree
+  # collapse selected subtrees
   pruned_phylo <- tree_phylo
   
-  for (i in seq(1,length(tips_to_remove))) {
-    if (all(tips_to_remove[[i]] %in% pruned_phylo$tip.label)) {
-      pruned_phylo <- ape::drop.tip(pruned_phylo, tips_to_remove[[i]], trim.internal = TRUE)
-      # print(pruned_phylo$Nnode)
-      # print(length(pruned_phylo$tip.label))
+  for (i in seq(1,length(subs_to_collapse))) {
+    if (all(subs_to_collapse[[i]]$tip.label %in% pruned_phylo$tip.label)) {
+      pruned_phylo <- treeducken::collapse_clade(list(pruned_phylo), subs_to_collapse[[i]])
+      pruned_phylo <- pruned_phylo[[1]]
+      # print(c(pruned_phylo$Nnode, length(pruned_phylo$tip.label)))
     }
   }
   
@@ -133,9 +137,9 @@ create_tree <- function(ftree, df_anno_imgvr, df_anno_nr) {
   my_colors <- c("#669900","#99CC33", "#ccee66","#006699","#3399cc",
                  "#990066","#cc3399","#900808", "#E02929",
                  "#ff6600","#ff9900","#ffcc00", "#FFE788")
-  my_colors <- c(colorRampPalette(my_colors)(length(unique(pruned_data$Phylum))-1),"#787777")
+  my_colors <- c(colorRampPalette(my_colors)(length(unique(pruned_data$Phylum))-1))
   my_colors2 <- c("#5f0f40","#9a031e","#fb8b24","#BC5210","#0f4c5c")
-  my_colors2 <- c(colorRampPalette(my_colors2)(length(unique(pruned_data$eco3))-1),"#787777")
+  my_colors2 <- c(colorRampPalette(my_colors2)(length(unique(pruned_data$eco3))-1))
   
   # my_colors <- rev(c("#fe0000", "#800001", "#fe6a00", "#803400",
   #                "#ffd800", "#806b00", "#00fe21", "#007f0e",
@@ -143,40 +147,37 @@ create_tree <- function(ftree, df_anno_imgvr, df_anno_nr) {
   
   ##  ================== plot the tree =========================================
   
-  p <- ggtree(pruned_phylo, layout = "circular", color="black", size=0.2) 
+  p <- ggtree(pruned_phylo, layout = "circular", color="darkgrey", size=0.2) 
 
   p <- p %<+% pruned_data +
-    geom_tippoint(aes(fill=Phylum), size=0.7, alpha=0.7, shape=21, color="transparent",
+    geom_tippoint(aes(fill=Phylum), size=1.2, alpha=0.7, shape=21, color="transparent",
                   show.legend = FALSE) +
     
-    geom_tiplab(color="black", size=1, align=FALSE) +
-    
-    # FOR SOME REASON TIP LABELS GIVE AN ERROR WHEN ALIGN IS SET TO TRUE ?????
-    # geom_tiplab(color="black", size=0.8, align=TRUE,
-    #             linetype = "dotted", linesize = 0.2) +
+    geom_tiplab(color="black", size=1.5, align=TRUE,
+                linetype = "dotted", linesize = 0.1) +
   
     geom_fruit(geom=geom_tile,
                mapping=aes(fill=Phylum),
-               offset = 0.5,
-               width=0.4) +
+               offset = 1.1,
+               width=0.3) +
   
     scale_fill_manual(name="Phylum (inner circle)",
-                      guide=guide_legend(keywidth=0.8, keyheight=0.8, ncol=1),
-                      values=my_colors) +
+                      guide=guide_legend(keywidth=1.5, keyheight=1.5, ncol=1),
+                      values=my_colors, na.value = "white") +
   
-    theme(legend.title=element_text(size=9), legend.text=element_text(size=7))
+    theme(legend.title=element_text(size=15), legend.text=element_text(size=12))
   
   p <- p +
     new_scale_fill() +
     
     geom_fruit(geom=geom_tile,
                mapping=aes(fill=eco3),
-               offset = 0.08,
-               width=0.3) +
+               offset = 0.05,
+               width=0.2) +
   
     scale_fill_manual(name="Ecosystem (outer circle)",
-                      guide=guide_legend(keywidth=0.8, keyheight=0.8, ncol=1),
-                      values = my_colors2)
+                      guide=guide_legend(keywidth=1.5, keyheight=1.5, ncol=1),
+                      values = my_colors2, na.value = "white")
                       # values = my_colors[c(13,11,9,7,5)])
   
   ## =============================================================================
@@ -188,8 +189,179 @@ create_tree <- function(ftree, df_anno_imgvr, df_anno_nr) {
   
   # output file name is basename of ftree without extension
   ggsave(filename=path_target(paste0(basename(ftree), ".pdf")), plot=p, width = 20, height = 13)
+  
+  # return(p)
 }
 ```
+
+
+```{r}
+## ============== split the function to work with big trees ======================
+
+# function to read the ".nwk" tree file, plot using ggtree, and save to pdf file
+create_data <- function(ftree, df_anno_imgvr, df_anno_nr) {
+  
+  tree_tbl <- read.tree(ftree) %>%
+    as_tibble() %>%
+    mutate(UVIG = ifelse(str_detect(label, "^IMGVR"), label, "")) %>%
+    mutate(UVIG = str_replace_all(UVIG, "\\|.*", ""))
+
+  tree_IMGVR <- tree_tbl %>% 
+    dplyr::filter(UVIG != "") %>%
+    left_join(df_anno_imgvr[, c("UVIG", "Kingdom", "Phylum", "Class", "eco3")], by = "UVIG") %>%
+    mutate(Kingdom = "Viruses")
+
+  tree_nr <- tree_tbl %>%
+    dplyr::filter(UVIG == "") %>%
+    left_join(df_anno_nr[, c("protid", "Kingdom", "Phylum", "Class")], by = c("label" = "protid")) %>%
+    mutate(eco3 = "Unknown")
+
+  # tree <- rbind(tree_IMGVR, tree_nr) %>%
+  #   as.treedata()
+  
+  # create dataframe with tree data
+  tree_data <- rbind(tree_IMGVR, tree_nr)
+  
+    # make labels shorter
+  tree_data$label[grep("^IMGVR", tree_data$label)] <- tree_data$UVIG[grep("^IMGVR", tree_data$label)]
+  
+  return(tree_data)
+}
+
+compute_subtrees <- function(tree_data) {
+  
+  # create tree as phylo object (easier to manipulate)
+  tree_phylo <- as.phylo(tree_data)
+  
+  # get all possible subtrees
+  sub <- subtrees(tree_phylo)
+  return(sub)
+}
+
+prune_tree <- function(tree_data, sub) {
+  
+  ## ===================== reduce tree at phylum level =========================
+  # create tree as phylo object (easier to manipulate)
+  tree_phylo <- as.phylo(tree_data)
+  
+  # extract subtrees which leaves have the same phylum
+  subs_to_collapse_ind <- which(sapply(sub, function(x) {
+    length(unique(tree_data$Phylum[which(tree_data$label %in% x$tip.label)])) == 1
+  }))
+  
+  subs_to_collapse <- sub[subs_to_collapse_ind]
+  
+  # sort subs_to collapse in decreasing number of tips order
+  subs_to_collapse <- subs_to_collapse[order(sapply(subs_to_collapse, function(x) {length(x$tip.label)}),
+                                             decreasing = TRUE)]
+  
+  # collapse selected subtrees
+  pruned_phylo <- tree_phylo
+  
+  for (i in seq(1,length(subs_to_collapse))) {
+    if (all(subs_to_collapse[[i]]$tip.label %in% pruned_phylo$tip.label)) {
+      pruned_phylo <- treeducken::collapse_clade(list(pruned_phylo), subs_to_collapse[[i]])
+      pruned_phylo <- pruned_phylo[[1]]
+      # print(c(pruned_phylo$Nnode, length(pruned_phylo$tip.label)))
+    }
+  }
+  
+  return(pruned_phylo)
+  
+}
+  
+
+plot_tree <- function(tree_data, pruned_phylo, filename="nome") {
+  
+  ## ==================== prepare annotation dataset for the plot ========================
+  
+  # prepare dataframe with annotations for the plot
+  new_tips <- pruned_phylo$tip.label
+  pruned_data <- as.data.frame(tree_data[which(tree_data$label %in% new_tips),])
+  
+  # remove duplicates from labels so they can be used as rownames
+  if (length(new_tips)!=length(unique(new_tips))) {
+
+    couples <- as.data.frame(table(pruned_phylo$tip.label))
+    couples <- couples$Var1[which(couples$Freq!=1)]
+
+    for (x in couples) {
+      second <- paste(x, "_2", sep = "")
+      pruned_phylo$tip.label[which(pruned_phylo$tip.label==x)][2] <- second
+      pruned_data$label[which(pruned_data$label==x)][2] <- second
+    }
+  }
+  
+  rownames(pruned_data) <- pruned_data$label
+  
+  # Uniform NAs
+  pruned_data$Phylum[which(pruned_data$Phylum=="")] <- NA
+  pruned_data$eco3[which(pruned_data$eco3=="")] <- NA
+  pruned_data$Phylum[which(pruned_data$Phylum=="Unknown")] <- NA
+  pruned_data$eco3[which(pruned_data$eco3=="Unknown")] <- NA
+  
+  
+  pruned_data <- pruned_data[seq(4,9)]
+  
+  # set colors to always have enough
+  my_colors <- c("#669900","#99CC33", "#ccee66","#006699","#3399cc",
+                 "#990066","#cc3399","#900808", "#E02929",
+                 "#ff6600","#ff9900","#ffcc00", "#FFE788")
+  my_colors_phy <- c(colorRampPalette(my_colors)(length(unique(pruned_data$Phylum))-1))
+  my_colors_eco <- c(colorRampPalette(my_colors)(length(unique(pruned_data$eco3))-1))
+  
+  # my_colors <- rev(c("#fe0000", "#800001", "#fe6a00", "#803400",
+  #                "#ffd800", "#806b00", "#00fe21", "#007f0e",
+  #                "#0094fe", "#00497e", "#0026ff", "#001280", "#b100fe"))
+  # my_colors2 <- c("#5f0f40","#9a031e","#fb8b24","#BC5210","#0f4c5c")
+  
+  ##  ================== plot the tree =========================================
+  
+  p <- ggtree(pruned_phylo, layout = "circular", color="grey", size=0.2) 
+
+  p <- p %<+% pruned_data +
+    geom_tippoint(aes(fill=Phylum), size=0.7, alpha=0.7, shape=21, 
+                  color="white", stroke=0.01,
+                  show.legend = FALSE) +
+    
+    geom_tiplab(color="darkgrey", size=0.5, align=TRUE,
+                linetype = 0,
+                # linetype = "dashed", linesize = 0.000001,
+                geom = "text") +
+  
+    geom_fruit(geom=geom_tile,
+               mapping=aes(fill=Phylum),
+               offset = 0.12,
+               width=0.5) +
+  
+    scale_fill_manual(name="Phylum (inner circle)",
+                      guide=guide_legend(keywidth=1, keyheight=1, ncol=2),
+                      values=my_colors_phy, na.value = "lightgrey") +
+  
+    theme(legend.title=element_text(size=12), legend.text=element_text(size=9))
+  
+  p <- p +
+    new_scale_fill() +
+    
+    geom_fruit(geom=geom_tile,
+               mapping=aes(fill=eco3),
+               offset = 0.09,
+               width=0.4) +
+  
+    scale_fill_manual(name="Ecosystem (outer circle)",
+                      guide=guide_legend(keywidth=1, keyheight=1, ncol=1),
+                      values = my_colors_eco, na.value = "lightgrey")
+  
+  ## =============================================================================
+
+  # output file name is basename of ftree without extension
+  # ggsave(filename=path_target(paste0(basename(tree_data), ".pdf")), plot=p, width = 20, height = 13)
+  ggsave(filename=path_target(paste0(filename, ".pdf")), plot=p, width = 20, height = 13)
+
+  # return(p)
+}
+```
+
 
 ### Protein annotation
 
@@ -267,8 +439,12 @@ TODO:
 
 
 ```{r using alkb.nwk as test}
-create_tree(here(wd, "top_alkb_tree.nwk"), df_anno_imgvr, df_anno_nr)
+# Create, prune and plot the small test tree
+
+# create_tree(here(wd, "top_alkb_tree.nwk"), df_anno_imgvr, df_anno_nr)
 ```
+
+
 
 Files were saved to `r path_target()`.
 
@@ -277,13 +453,44 @@ TODO:
 - [ ] If the plot looks good, plot for all three trees
 
 ```{r tree visualization}
-ftrees <- list.files(here(wd), pattern = "fam.*_tree.nwk", full.names = T) %>%
-  # set names using famid
-  setNames(stringr::str_extract(., "fam\\d+"))
+# ftrees <- list.files(here(wd), pattern = "fam.*_tree.nwk", full.names = T) %>%
+#   # set names using famid
+#   setNames(stringr::str_extract(., "fam\\d+"))
 
 # create tree visualization for each protein family using function `create_tree`
 # very time-consuming
 # lapply(ftrees, create_tree, df_anno_nr = df_anno_nr, df_anno_imgvr = df_anno_imgvr)
+# create_tree(ftrees[1], df_anno_nr = df_anno_nr, df_anno_imgvr = df_anno_imgvr)
+
+## ===========================================================================
+# Prepare data to plot
+
+# ftree_data <- lapply(ftrees, create_data, df_anno_nr = df_anno_nr, df_anno_imgvr = df_anno_imgvr)
+# 
+# sub_0023 <- compute_subtrees(ftree_data$fam0023)
+# sub_0026 <- compute_subtrees(ftree_data$fam0026)
+# sub_0253 <- compute_subtrees(ftree_data$fam0253)
+# 
+# ftree_subs <- list("fam0023" = sub_0023,
+#                    "fam0026" = sub_0026,
+#                    "fam0253" = sub_0253)
+# 
+# ftree_pruned <- mapply(prune_tree, ftree_data, ftree_subs, 
+#                        SIMPLIFY = FALSE)
+
+save(ftree_data, ftree_pruned, here(wd, "ftree_ready2plot.RData"))
+
+## ===========================================================================
+# Load pruned trees to plot quickly
+
+load(here(wd, "ftree_ready2plot.RData"))
+
+mapply(plot_tree, ftree_data, ftree_pruned, 
+       c("fam0023", "fam0026", "fam0253"),
+       SIMPLIFY = FALSE)
+
+# plot_tree(ftree_data$fam0253, ftree_pruned$fam0253, "prova_0253")
+
 ```
 
 
