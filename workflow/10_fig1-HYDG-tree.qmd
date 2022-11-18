@@ -43,7 +43,7 @@ TODO:
 
 - [ ] Change layout of the tree if necessary
 
-```{r}
+```{r packages}
 library(here)
 library(conflicted)
 library(tidyverse)
@@ -61,7 +61,7 @@ wd <- here(dir_prj, "data/fig1_HYDG_tree")
 ```
 
 
-```{r}
+```{r create_tree function}
 # function to read the ".nwk" tree file, plot using ggtree, and save to pdf file
 # This works for the small tree 
 create_tree <- function(ftree, df_anno_imgvr, df_anno_nr) {
@@ -158,7 +158,7 @@ create_tree <- function(ftree, df_anno_imgvr, df_anno_nr) {
   
     geom_fruit(geom=geom_tile,
                mapping=aes(fill=Phylum),
-               offset = 1.1,
+               offset = 0.5,
                width=0.3) +
   
     scale_fill_manual(name="Phylum (inner circle)",
@@ -195,7 +195,7 @@ create_tree <- function(ftree, df_anno_imgvr, df_anno_nr) {
 ```
 
 
-```{r}
+```{r split create_tree function for big trees}
 ## ============== split the function to work with big trees ======================
 
 # function to read the ".nwk" tree file, plot using ggtree, and save to pdf file
@@ -324,7 +324,7 @@ plot_tree <- function(tree_data, pruned_phylo, filename="nome") {
                   color="white", stroke=0.01,
                   show.legend = FALSE) +
     
-    geom_tiplab(color="darkgrey", size=0.5, align=TRUE,
+    geom_tiplab(color="black", size=0.4, align=TRUE,
                 linetype = 0,
                 # linetype = "dashed", linesize = 0.000001,
                 geom = "text") +
@@ -441,7 +441,7 @@ TODO:
 ```{r using alkb.nwk as test}
 # Create, prune and plot the small test tree
 
-# create_tree(here(wd, "top_alkb_tree.nwk"), df_anno_imgvr, df_anno_nr)
+create_tree(here(wd, "top_alkb_tree.nwk"), df_anno_imgvr, df_anno_nr)
 ```
 
 
@@ -477,8 +477,8 @@ TODO:
 # 
 # ftree_pruned <- mapply(prune_tree, ftree_data, ftree_subs, 
 #                        SIMPLIFY = FALSE)
-
-save(ftree_data, ftree_pruned, here(wd, "ftree_ready2plot.RData"))
+#
+# save(ftree_data, ftree_pruned, here(wd, "ftree_ready2plot.RData"))
 
 ## ===========================================================================
 # Load pruned trees to plot quickly
@@ -488,9 +488,6 @@ load(here(wd, "ftree_ready2plot.RData"))
 mapply(plot_tree, ftree_data, ftree_pruned, 
        c("fam0023", "fam0026", "fam0253"),
        SIMPLIFY = FALSE)
-
-# plot_tree(ftree_data$fam0253, ftree_pruned$fam0253, "prova_0253")
-
 ```
 
 
