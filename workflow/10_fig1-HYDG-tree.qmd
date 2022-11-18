@@ -238,15 +238,15 @@ compute_subtrees <- function(tree_data) {
   return(sub)
 }
 
-prune_tree <- function(tree_data, sub) {
+prune_tree <- function(tree_data, sub, level="Phylum") {
   
   ## ===================== reduce tree at phylum level =========================
   # create tree as phylo object (easier to manipulate)
   tree_phylo <- as.phylo(tree_data)
   
-  # extract subtrees which leaves have the same phylum
+  # extract subtrees which leaves have the same phylum (or other level)
   subs_to_collapse_ind <- which(sapply(sub, function(x) {
-    length(unique(tree_data$Phylum[which(tree_data$label %in% x$tip.label)])) == 1
+    length(unique(tree_data[level][[1]][which(tree_data$label %in% x$tip.label)])) == 1
   }))
   
   subs_to_collapse <- sub[subs_to_collapse_ind]
@@ -269,9 +269,8 @@ prune_tree <- function(tree_data, sub) {
   return(pruned_phylo)
   
 }
-  
 
-plot_tree <- function(tree_data, pruned_phylo, filename="nome") {
+plot_tree <- function(tree_data, pruned_phylo, level="Phylum", filename="nome") {
   
   ## ==================== prepare annotation dataset for the plot ========================
   
@@ -295,21 +294,24 @@ plot_tree <- function(tree_data, pruned_phylo, filename="nome") {
   rownames(pruned_data) <- pruned_data$label
   
   # Uniform NAs
-  pruned_data$Phylum[which(pruned_data$Phylum=="")] <- NA
+  pruned_data[level][[1]][which(pruned_data[level][[1]]=="")] <- NA
   pruned_data$eco3[which(pruned_data$eco3=="")] <- NA
-  pruned_data$Phylum[which(pruned_data$Phylum=="Unknown")] <- NA
+  pruned_data[level][[1]][which(pruned_data[level][[1]]=="Unknown")] <- NA
   pruned_data$eco3[which(pruned_data$eco3=="Unknown")] <- NA
+    pruned_data[level][[1]][which(pruned_data[level][[1]]=="Unclassified")] <- NA
+  pruned_data$eco3[which(pruned_data$eco3=="Unclassified")] <- NA
   
   
   pruned_data <- pruned_data[seq(4,9)]
   
   # set colors to always have enough
-  my_colors <- c("#669900","#99CC33", "#ccee66","#006699","#3399cc",
-                 "#990066","#cc3399","#900808", "#E02929",
-                 "#ff6600","#ff9900","#ffcc00", "#FFE788")
-  my_colors_phy <- c(colorRampPalette(my_colors)(length(unique(pruned_data$Phylum))-1))
-  my_colors_eco <- c(colorRampPalette(my_colors)(length(unique(pruned_data$eco3))-1))
-  
+  my_colors_phy <- c("#002927","#6b0504","#43731c","#e6af2e")
+  my_colors_eco <- c("#0f4c5c","#840032","#b54b19","#e59500")
+  my_colors_phy <- c(colorRampPalette(my_colors_phy)(length(unique(pruned_data[level][[1]]))-1))
+  my_colors_eco <- c(colorRampPalette(my_colors_eco)(length(unique(pruned_data$eco3))-1))
+  # my_colors <- c("#669900","#99CC33", "#ccee66","#006699","#3399cc",
+  #                "#990066","#cc3399","#900808", "#E02929",
+  #                "#ff6600","#ff9900","#ffcc00", "#FFE788")
   # my_colors <- rev(c("#fe0000", "#800001", "#fe6a00", "#803400",
   #                "#ffd800", "#806b00", "#00fe21", "#007f0e",
   #                "#0094fe", "#00497e", "#0026ff", "#001280", "#b100fe"))
@@ -317,28 +319,32 @@ plot_tree <- function(tree_data, pruned_phylo, filename="nome") {
   
   ##  ================== plot the tree =========================================
   
-  p <- ggtree(pruned_phylo, layout = "circular", color="grey", size=0.2) 
+  p <- ggtree(pruned_phylo, layout = "circular", color="#555555", size=0.1) 
+  
+  size_text <- 1
+  if (length(pruned_phylo$tip.label)>1000) {size_text <- 0.5}
 
   p <- p %<+% pruned_data +
-    geom_tippoint(aes(fill=Phylum), size=0.7, alpha=0.7, shape=21, 
-                  color="white", stroke=0.01,
+    geom_tippoint(aes(fill=.data[[level]]), 
+                  size=0.8, alpha=1, shape=21,
+                  color="transparent", stroke=0,
                   show.legend = FALSE) +
     
-    geom_tiplab(color="black", size=0.4, align=TRUE,
+    geom_tiplab(color="black", size=size_text, align=TRUE,
                 linetype = 0,
-                # linetype = "dashed", linesize = 0.000001,
+                # linetype = "dashed", linesize = 0.001,
                 geom = "text") +
   
     geom_fruit(geom=geom_tile,
-               mapping=aes(fill=Phylum),
-               offset = 0.12,
+               mapping=aes(fill=.data[[level]]),
+               offset = 0.23,
                width=0.5) +
   
-    scale_fill_manual(name="Phylum (inner circle)",
-                      guide=guide_legend(keywidth=1, keyheight=1, ncol=2),
+    scale_fill_manual(name=paste(level, "(inner circle)", sep=" "),
+                      guide=guide_legend(keywidth=1, keyheight=1, ncol=1),
                       values=my_colors_phy, na.value = "lightgrey") +
   
-    theme(legend.title=element_text(size=12), legend.text=element_text(size=9))
+    theme(legend.title=element_text(size=15), legend.text=element_text(size=12))
   
   p <- p +
     new_scale_fill() +
@@ -361,7 +367,6 @@ plot_tree <- function(tree_data, pruned_phylo, filename="nome") {
   # return(p)
 }
 ```
-
 
 ### Protein annotation
 
@@ -424,7 +429,6 @@ Annotations of IMGVR and others are stored in `df_anno_imgvr`, and saved to file
 df_anno_imgvr <- fread(here(wd, "annotation_imgvr.tsv.gz"))
 ```
 
-
 ### Tree visualization
 
 Phylogenetic tree of each protein family was inferred using the maximum likelihood method with the fasttree program [@2010-FastTree_Price]. The best-scoring ML tree was selected from 100 bootstrap replicates. Taxonomy annotation of each protein was obtained from the hit results and normalized using Taxonkit software [@2021-TaxonKit_Shen]. The tree was visualized using ggtree software [@2022-Ggtree_Xu].
@@ -453,9 +457,9 @@ TODO:
 - [ ] If the plot looks good, plot for all three trees
 
 ```{r tree visualization}
-# ftrees <- list.files(here(wd), pattern = "fam.*_tree.nwk", full.names = T) %>%
-#   # set names using famid
-#   setNames(stringr::str_extract(., "fam\\d+"))
+ftrees <- list.files(here(wd), pattern = "fam.*_tree.nwk", full.names = T) %>%
+  # set names using famid
+  setNames(stringr::str_extract(., "fam\\d+"))
 
 # create tree visualization for each protein family using function `create_tree`
 # very time-consuming
@@ -465,7 +469,7 @@ TODO:
 ## ===========================================================================
 # Prepare data to plot
 
-# ftree_data <- lapply(ftrees, create_data, df_anno_nr = df_anno_nr, df_anno_imgvr = df_anno_imgvr)
+ftree_data <- lapply(ftrees, create_data, df_anno_nr = df_anno_nr, df_anno_imgvr = df_anno_imgvr)
 # 
 # sub_0023 <- compute_subtrees(ftree_data$fam0023)
 # sub_0026 <- compute_subtrees(ftree_data$fam0026)
@@ -474,22 +478,40 @@ TODO:
 # ftree_subs <- list("fam0023" = sub_0023,
 #                    "fam0026" = sub_0026,
 #                    "fam0253" = sub_0253)
-# 
-# ftree_pruned <- mapply(prune_tree, ftree_data, ftree_subs, 
-#                        SIMPLIFY = FALSE)
 #
-# save(ftree_data, ftree_pruned, here(wd, "ftree_ready2plot.RData"))
+# save(ftree_subs, file = here(wd, "ftree_subtrees.RData"))
+# load subtrees (otherwise it is very time consuming)
+load(here(wd, "ftree_subtrees.RData"))
 
-## ===========================================================================
-# Load pruned trees to plot quickly
+## =============================== PHYLUM plots ==============================
 
-load(here(wd, "ftree_ready2plot.RData"))
+# prune the trees
+# ftree_pruned <- mapply(prune_tree, ftree_data, ftree_subs,
+#                        SIMPLIFY = FALSE)
 
-mapply(plot_tree, ftree_data, ftree_pruned, 
-       c("fam0023", "fam0026", "fam0253"),
-       SIMPLIFY = FALSE)
+# plot and save the figures
+# mapply(plot_tree, ftree_data, ftree_pruned, 
+#        c("fam0023", "fam0026", "fam0253"),
+#        SIMPLIFY = FALSE)
+
+# save(ftree_data, ftree_pruned, file=here(wd, "ftree_ready2plot.RData"))
 ```
 
+```{r tree visualization with collapsing at kingdom level}
+## =============================== KINGDOM plots ==============================
+# remember to load the subtrees
+
+# prune the trees
+ftree_pruned_king <- mapply(prune_tree, ftree_data, ftree_subs, rep("Kingdom",3),
+                            SIMPLIFY = FALSE)
+
+# plot and save the figures
+mapply(plot_tree, ftree_data, ftree_pruned_king, rep("Kingdom",3),
+       c("fam0023_kingdom", "fam0026_kingdom", "fam0253_kingdom"),
+       SIMPLIFY = FALSE)
+
+# save(ftree_data, ftree_pruned_king, file=here(wd, "ftree_ready2plot_king.RData"))
+```
 
 ## Files written
 
