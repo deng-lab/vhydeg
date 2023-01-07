@@ -19,6 +19,7 @@ params:
 Updated at `r format(Sys.time(), '%Y-%m-%d %H:%M:%S', tz = 'UTC')` UTC.
 
 ```{r setup, message=FALSE, include=F}
+params <- list(name="10_fig1-HYDG-tree")
 here::i_am(paste0(params$name, ".qmd"), uuid = "cdc28f4c-4364-4c58-8fa2-c91fc4d1dfd4")
 projthis::proj_create_dir_target(params$name, clean = FALSE)
 path_target <- projthis::proj_path_target(params$name)
@@ -53,7 +54,7 @@ library(tidytree)
 library(ape)
 library(ggtree)
 
-dir_prj <- normalizePath("..")
+dir_prj <- normalizePath(".")
 wd <- here(dir_prj, "data/fig1_HYDG_tree")
 
 # function to read the ".nwk" tree file, plot using ggtree, and save to pdf file
@@ -78,9 +79,9 @@ create_tree <- function(ftree, df_anno_imgvr, df_anno_nr) {
 
   p <- ggtree(tree, layout="equal_angle", color="grey") +
     geom_tiplab2(aes(label=Kingdom, color = Kingdom), size=0, color="black", offset=0) +
-    geom_tippoint(aes(color=Kingdom), size=0.2, alpha=0.7) 
+    geom_tippoint(aes(color=Kingdom), size=1, alpha=0.7) 
   # output file name is basename of ftree without extension
-  ggsave(filename=path_target(paste0(basename(ftree), ".pdf")), plot=p, width = 20, height = 13)
+  ggsave(filename=paste0(basename(ftree), ".pdf"), plot=p, width = 20, height = 13)
 }
 ```
 
@@ -159,7 +160,7 @@ TODO:
 - [ ] Add Phylum name, environment source as a circular heatmap in the outside of the tree.
 
 ```{r using alkb.nwk as test}
-# create_tree(here(wd, "top_alkb_tree.nwk"), df_anno_imgvr, df_anno_nr)
+create_tree(here(wd, "top_alkb_tree.nwk"), df_anno_imgvr, df_anno_nr)
 ```
 
 Files were saved to `r path_target()`.
@@ -175,7 +176,8 @@ ftrees <- list.files(here(wd), pattern = "fam.*_tree.nwk", full.names = T) %>%
 
 # create tree visualization for each protein family using function `create_tree`
 # very time-consuming
-# lapply(ftrees, create_tree, df_anno_nr = df_anno_nr, df_anno_imgvr = df_anno_imgvr)
+lapply(ftrees, create_tree, df_anno_nr = df_anno_nr, df_anno_imgvr = df_anno_imgvr)
+create_tree(ftrees[["fam0253"]], df_anno_nr = df_anno_nr, df_anno_imgvr = df_anno_imgvr)
 ```
 
 
